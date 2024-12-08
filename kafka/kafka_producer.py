@@ -1,7 +1,7 @@
 import json
 import logging
 import time
-
+import os
 import numpy as np
 import pandas as pd
 from pykafka import KafkaClient
@@ -34,12 +34,14 @@ def main():
 
     client = KafkaClient("localhost:9092")
     topic = client.topics["hospital-data-topic"]
+
+    # Try removing min_queeued and linger_ms
     producer = topic.get_producer(
         min_queued_messages=num_of_hospitals, linger_ms=60 * 1000
     )
 
     # Read the static hospital data
-    hospital_data = pd.read_csv("../data/final_hospital_data.csv", index_col=0)
+    hospital_data = pd.read_csv(os.path.join(os.getcwd(), "data", "final_hospital_data.csv"), index_col=0)
 
     hospital_data = hospital_data.head(n=num_of_hospitals)
 
@@ -69,7 +71,8 @@ def main():
             }
             simulated_hospital_data = pd.DataFrame(hospital_static_features)
 
-            # Add timestamps and simulated utilization
+            # Add timestamps and simulated utilization. Making timestamp a string as pandas
+            # datetime is not JSON serializable
             simulated_hospital_data["timestamp"] = time_range.strftime("%Y-%m-%d %H:%M:%S")
             simulated_hospital_data["simulated_utilization"] = utilization
 
@@ -80,8 +83,9 @@ def main():
 
         # Sort the dataframe by timestamp to simulate sending real-time messages
         simulated_data_df = simulated_data_df.sort_values(by="timestamp").reset_index()
-
+        
         for idx, row in simulated_data_df.iterrows():
+            # Each message contains simulated data for one hospital at one timestamp
             message = row.to_dict()
 
             # logger.debug(row)

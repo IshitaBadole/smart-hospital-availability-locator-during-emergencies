@@ -14,11 +14,15 @@
 
 To run the kafka producer and consumer first start kafka and zookeeper
 
-To start kafka now and restart at login:
+1. Install kafka:
+    `brew install kafka`
 
-`brew services start kafka`
+2. To start kafka now and restart at login:
 
-Or, if you don't want/need a background service you can just run:
-  `/opt/homebrew/opt/kafka/bin/kafka-server-start /opt/homebrew/etc/kafka/server.properties`
+    `brew services start kafka`
 
-`brew services start zookeeper`
+    Or, if you don't want/need a background service you can just run:
+    `/opt/homebrew/opt/kafka/bin/kafka-server-start /opt/homebrew/etc/kafka/server.properties`
+
+3. Start the Zookeeper service
+    `brew services start zookeeper`
