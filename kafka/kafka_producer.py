@@ -1,129 +1,102 @@
-from kafka import KafkaProducer
-from kafka.errors import KafkaError
-import logging as log
 import json
-import random
+import logging
+import time
 
-producer = KafkaProducer(bootstrap_servers=['127.0.0.1:9092'], 
-                         api_version=(0,9), 
-                         value_serializer=lambda m: json.dumps(m).encode('ascii'))
+import numpy as np
+import pandas as pd
+from pykafka import KafkaClient
 
-
-# Dataset columns
-#  #   Column                                                Non-Null Count  Dtype  
-# ---  ------                                                --------------  -----  
-#  0   hospital_name                                         4633 non-null   object 
-#  1   hospital_ownership                                    4633 non-null   object 
-#  2   hospital_type                                         4633 non-null   object 
-#  3   lat                                                   4633 non-null   float64
-#  4   lng                                                   4633 non-null   float64
-#  5   address                                               4633 non-null   object 
-#  6   city                                                  4633 non-null   object 
-#  7   emergency_services                                    4633 non-null   bool   
-#  8   source_year                                           4633 non-null   int64  
-#  9   days_in_period                                        4633 non-null   int64  
-#  10  subtotal_acute_utilization                            4633 non-null   float64
-#  11  subtotal_acute_bed_days_1400                          4633 non-null   float64
-#  12  hospital_overall_rating                               4633 non-null   object 
-#  13  mortality_national_comparison                         4633 non-null   object 
-#  14  safety_of_care_national_comparison                    4633 non-null   object 
-#  15  readmission_national_comparison                       4633 non-null   object 
-#  16  patient_experience_national_comparison                4633 non-null   object 
-#  17  effectiveness_of_care_national_comparison             4633 non-null   object 
-#  18  timeliness_of_care_national_comparison                4633 non-null   object 
-#  19  efficient_use_of_medical_imaging_national_comparison  4633 non-null   object 
-#  20  Beds Availability                                     4633 non-null   bool 
-
-# list of hospitals data 
-# each element is a dictionary of hospital and it's fixed information
-hospitals_data = [{
-    "hospital_name": "A",
-    "hospital_ownership": "",
-    "hospital_type": "",
-    "lat": "",
-    "lng": "",
-    "address": "",
-    "city": "",
-    "emergency_services": "",
-    "hospital_overall_rating": "",
-    "mortality_national_comparison": "",
-    "safety_of_care_national_comparison": "",
-    "readmission_national_comparison": "",
-    "patient_experience_national_comparison": "",
-    "effectiveness_of_care_national_comparison": "",
-    "timeliness_of_care_national_comparison": "",
-    "efficient_use_of_medical_imaging_national_comparison": "",
-    "Beds Availability": ""
-},
-{
-    "hospital_name": "B",
-    "hospital_ownership": "",
-    "hospital_type": "",
-    "lat": "",
-    "lng": "",
-    "address": "",
-    "city": "",
-    "emergency_services": "",
-    "hospital_overall_rating": "",
-    "mortality_national_comparison": "",
-    "safety_of_care_national_comparison": "",
-    "readmission_national_comparison": "",
-    "patient_experience_national_comparison": "",
-    "effectiveness_of_care_national_comparison": "",
-    "timeliness_of_care_national_comparison": "",
-    "efficient_use_of_medical_imaging_national_comparison": "",
-    "Beds Availability": ""
-},
-{
-    "hospital_name": "C",
-    "hospital_ownership": "",
-    "hospital_type": "",
-    "lat": "",
-    "lng": "",
-    "address": "",
-    "city": "",
-    "emergency_services": "",
-    "hospital_overall_rating": "",
-    "mortality_national_comparison": "",
-    "safety_of_care_national_comparison": "",
-    "readmission_national_comparison": "",
-    "patient_experience_national_comparison": "",
-    "effectiveness_of_care_national_comparison": "",
-    "timeliness_of_care_national_comparison": "",
-    "efficient_use_of_medical_imaging_national_comparison": "",
-    "Beds Availability": ""
-}]
-# Randomly choose a hospital
-hospital_data = random.choice(hospitals_data)
-
-# Generate simulated utilization data
-timing_data = {
-    "source_year": 2024,
-    "days_in_period": 365,
-    "subtotal_acute_utilization": float(random.randrange(0, 100)),
-    "subtotal_acute_bed_days_1400": float(random.randrange(800, 50000))
-}
-
-# Construct the message to contain hospital data with simulated utilization data
-message = hospital_data | timing_data
-
-# Log the message on the producer side
-log.info(message)
-
-# Asynchronous by default
-future = producer.send('json-topic', message)
-
-# Block for 'synchronous' sends
-try:
-    record_metadata = future.get(timeout=10)
-except KafkaError:
-    # Decide what to do if produce request failed...
-    log.exception()
-    pass
-
-# Successful result returns assigned partition and offset
-print (record_metadata.topic)
-print (record_metadata.partition)
-print (record_metadata.offset)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
+# Simulate utilization using trends, noise, and random events
+def simulate_utilization(num_records):
+    # Linear trend for utilization over time
+    trend = 75 + 0.1 * np.arange(num_records)
+
+    # Random noise
+    noise = np.random.normal(0, 10, size=num_records)
+
+    # Event-driven spikes (simulate a surge during a specific time window)
+    event_spike = np.zeros(num_records)
+    event_spike[720:780] = 30  # Spike during a specific period (12:00 PM to 1:00 PM)
+
+    # Combine trend, noise, and spikes
+    utilization = trend + noise + event_spike
+    # Ensure values are between 0 and 100
+    return np.clip(utilization, 0, 100)
+
+
+def main():
+    # As a start, work with only five hospitals
+    num_of_hospitals = 5
+
+    client = KafkaClient("localhost:9092")
+    topic = client.topics["hospital-data-topic"]
+    producer = topic.get_producer(
+        min_queued_messages=num_of_hospitals, linger_ms=60 * 1000
+    )
+
+    # Read the static hospital data
+    hospital_data = pd.read_csv("../data/final_hospital_data.csv", index_col=0)
+
+    hospital_data = hospital_data.head(n=num_of_hospitals)
+
+    # Define the start and end times for the simulation
+    start_time = pd.Timestamp("2023-01-01 00:00:00")
+    end_time = start_time + pd.Timedelta(days=1)
+
+    while True:
+        # Generate minute-level time range
+        time_range = pd.date_range(start=start_time, end=end_time, freq="h")
+
+        # Generate simulated data for the time-range accounting for trend over the time range
+        simulated_data = []
+
+        # For each hospital, generate simulated utilization for timestamps in the time range
+        for idx, row in hospital_data.iterrows():
+            num_records = len(time_range)
+
+            print(
+                f"Simulate utilization for hospital: {hospital_data.iloc[idx]['hospital_name']}"
+            )
+            utilization = simulate_utilization(num_records)
+
+            # Repeat the hospital's static features for each timestamp
+            hospital_static_features = {
+                col: [row[col]] * num_records for col in hospital_data.columns
+            }
+            simulated_hospital_data = pd.DataFrame(hospital_static_features)
+
+            # Add timestamps and simulated utilization
+            simulated_hospital_data["timestamp"] = time_range.strftime("%Y-%m-%d %H:%M:%S")
+            simulated_hospital_data["simulated_utilization"] = utilization
+
+            simulated_data.append(simulated_hospital_data)
+
+        # Combine all hospital data into a single DataFrame
+        simulated_data_df = pd.concat(simulated_data, ignore_index=True)
+
+        # Sort the dataframe by timestamp to simulate sending real-time messages
+        simulated_data_df = simulated_data_df.sort_values(by="timestamp").reset_index()
+
+        for idx, row in simulated_data_df.iterrows():
+            message = row.to_dict()
+
+            # logger.debug(row)
+            print(f"[{idx}] Sending utilization for {message['hospital_name']} at {message['timestamp']}")
+            producer.produce(json.dumps(message).encode("utf-8"))
+
+            # Wait for 1 minute after sending num_of_hospitals data
+            # Assuming that 1 minute is equivalent to 1 hour for demonstration purposes
+            if (idx + 1) % num_of_hospitals == 0:
+                time.sleep(10)
+                print()
+
+        start_time = end_time
+        end_time = end_time + pd.Timedelta(days=1)
+
+
+if __name__ == "__main__":
+    main()
