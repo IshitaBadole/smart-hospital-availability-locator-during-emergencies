@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: minio
-        image: isba1563/minio:v1
+        image: isba1563/minio:latest
         env:
           - name: MINIO_HOST
             value: "minio:9000"

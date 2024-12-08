@@ -6,6 +6,7 @@ make push
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm install -f ./minio-config.yaml -n minio-ns --create-namespace minio-proj bitnami/minio
 
+docker pull isba1563/minio:latest
 kubectl apply -f ./minio-deployment.yaml
 kubectl apply -f ./minio-external-service.yaml
 
