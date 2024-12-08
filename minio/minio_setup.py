@@ -21,7 +21,7 @@ if not client.bucket_exists(bucketname):
 buckets = client.list_buckets()
 
 for bucket in buckets:
-    print(f"Bucket {bucket.name}, created {bucket.creation}")
+    print(f"Bucket {bucket.name}, created {bucket.creation_date}")
 
 try:
     objects = client.list_objects(bucketname)
