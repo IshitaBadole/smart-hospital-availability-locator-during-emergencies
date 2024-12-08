@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+#
+kind: Deployment
+metadata:
+  name: minio-deployment
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+      - name: minio
+        image: isba1563/minio:v1
+        env:
+          - name: MINIO_HOST
+            value: "minio:9000"

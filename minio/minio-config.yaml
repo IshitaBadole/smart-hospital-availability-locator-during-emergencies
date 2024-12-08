@@ -29,4 +29,6 @@ resources:
     memory: 0.5Gi
 
 ##
-defaultBuckets : "demucs-bucket"
+buckets:
+  - name: models
+    policy: public
