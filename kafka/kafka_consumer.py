@@ -5,18 +5,29 @@ import xgboost as xgb
 from datetime import datetime
 import pandas as pd
 import os
+from minio import Minio
+
+# Initializing minio variables
+minioHost = os.getenv("MINIO_HOST") or "localhost:9000"
+minioUser = os.getenv("MINIO_USER") or "rootuser"
+minioPasswd = os.getenv("MINIO_PASSWD") or "rootpass123"
+
+# Creating a minio client object
+minio_client = Minio(minioHost,
+               secure=False,
+               access_key=minioUser,
+               secret_key=minioPasswd)
+
+bucket = "models"
 
 # Creating the Kafka Client object and the Kafka topic
 client = KafkaClient("localhost:9092")
 topic = client.topics['hospital-data-topic']
 
-
 # Loading the mappings for categorical variables to their corresponding integer values from 
 # data/mappings.json
 with open(os.path.join(os.getcwd(), 'data', 'mappings.json')) as fp:
     mappings = json.load(fp)
-
-print(mappings.keys())
 
 # Creating the Kafka consumer
 consumer = topic.get_simple_consumer(consumer_group=b"default",
@@ -27,9 +38,11 @@ consumer = topic.get_simple_consumer(consumer_group=b"default",
 # Initializing the XGBoost model
 model = xgb.XGBRegressor()
 
-# Loading the XGBoost model from models/xgb_model.json
-# TODO: get the latest version of the  model json from minio object storage instead of the repo
-model.load_model(os.path.join(os.getcwd(), 'minio', 'models', 'xgb_model.json'))
+# Getting the V0 XGB model from Minio object storage
+response = minio_client.fget_object(bucket, 'xgb_model_v0.json', os.getcwd())
+
+# Loading the model
+model.load_model(os.path.join(os.getcwd(), 'xgb_model_v0.json'))
 
 for msg in consumer:
     # Decoding the JSON message coming from the producer
@@ -39,7 +52,6 @@ for msg in consumer:
     timestamp = datetime.strptime(sample['timestamp'], "%Y-%m-%d %H:%M:%S")
 
     # Adding the temporal lag features to the sample
-
     # TODO: This should be coming from Redis with all the lag features for each hospital initialized
     # to 0 in the redis cache
     for i in range(1, 13):
