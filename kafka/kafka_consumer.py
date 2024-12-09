@@ -6,17 +6,53 @@ from datetime import datetime
 import pandas as pd
 import os
 from minio import Minio
+import redis
+
+def execute_with_retry(command, *args, **kwargs):
+    """
+    Executes a Redis command with retry logic.
+
+    Parameters:
+    - command: The Redis command to execute (as a function).
+    - args, kwargs: Arguments to pass to the Redis command.
+
+    Returns:
+    - The result of the Redis command.
+    """
+    global redisClient
+    try:
+        # Call the Redis command
+        result = command(*args, **kwargs)
+        print(f"Command:{command} result:{result}")
+        return result
+    except (TimeoutError, ConnectionError) as e:
+        # Creating the Redis client again
+        redisClient = redis.StrictRedis(host=redisHost, 
+                                port=redisPort, 
+                                db=0)
+        result = command(*args, **kwargs)  
+        print(f"Command:{command} result:{result}")
+        return result
 
 # Initializing minio variables
 minioHost = os.getenv("MINIO_HOST") or "localhost:9000"
 minioUser = os.getenv("MINIO_USER") or "rootuser"
 minioPasswd = os.getenv("MINIO_PASSWD") or "rootpass123"
 
+# Defining Redis Variables
+redisHost = os.getenv("REDIS_HOST") or "localhost"
+redisPort = os.getenv("REDIS_PORT") or 6379
+
 # Creating a minio client object
 minio_client = Minio(minioHost,
                secure=False,
                access_key=minioUser,
                secret_key=minioPasswd)
+
+# Creating the Redis client
+redisClient = redis.StrictRedis(host=redisHost, 
+                                    port=redisPort, 
+                                    db=0)
 
 bucket = "models"
 
@@ -52,10 +88,20 @@ for msg in consumer:
     timestamp = datetime.strptime(sample['timestamp'], "%Y-%m-%d %H:%M:%S")
 
     # Adding the temporal lag features to the sample
-    # TODO: This should be coming from Redis with all the lag features for each hospital initialized
-    # to 0 in the redis cache
-    for i in range(1, 13):
-        sample[f"lag_{i}"] = 0
+    ground_truth_key = f"ground_truth:{sample['hospital_name']}"
+    key_exists = execute_with_retry(redisClient.exists, ground_truth_key)
+
+    # the key does not exist which means that the hospital data has never been seen before
+    if not key_exists:
+        # initialize the lag features to 0
+        lags = [0] * 12
+    else:
+        # get the ground truth values stored in redis
+        lags = redisClient.lrange(ground_truth_key, 0, -1)
+        lags = execute_with_retry(redisClient.lrange, ground_truth_key, 0 , -1)
+
+    for i in range(12):
+        sample[f"lag_{i+1}"] = lags[i]
 
     # Add temporal features to the sample
     sample["hour"] = timestamp.hour
@@ -85,14 +131,30 @@ for msg in consumer:
     sample_df.set_index(['index'], inplace=True)
     print(sample_df.columns)
 
-    print("Predicted utilization: ", model.predict(sample_df))
+    # Predict the utilization for the next hour
+    predicted_utilization = model.predict(sample_df)
+
+    print("Predicted utilization: ", predicted_utilization)
     print()
+
+    # Store the predicted utilization in Redis cache
+    predicted_utilization_key = f"pred_utilization:{sample['hospital_name']}"
+    execute_with_retry(redisClient.set, predicted_utilization_key, predicted_utilization)
 
     # consumer.commit_offsets()
 
+    # Add the ground truth utilization to the temporal lags
+    execute_with_retry(redisClient.rpush, ground_truth_key, sample['simulated_utilization'])
+    # Remove the oldest lag
+    execute_with_retry(redisClient.lpop, ground_truth_key)
 
-    # TODO : Get the latest version of the model from MinIO object storage
-    # TODO : Add the Redis cache and retraining logic 
+    # TODO: Store the current model in MinIO
+
+
+
+    
+
+
 
 
     
