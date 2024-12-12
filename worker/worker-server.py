@@ -1,10 +1,32 @@
-
 # imports
-import sys
 import os
-import redis
-from minio import Minio, InvalidResponseError
+import sys
+
+import pandas as pd
+from geopy.distance import geodesic
 from geopy.geocoders import Nominatim
+
+import redis
+from minio import InvalidResponseError, Minio
+
+# Defining Minio Variables
+minioHost = os.getenv("MINIO_HOST") or "localhost:9000"
+minioUser = os.getenv("MINIO_USER") or "rootuser"
+minioPasswd = os.getenv("MINIO_PASSWD") or "rootpass123"
+
+# bucket variables
+data_bucket = "data"
+
+# Creating a minio client object
+minio_client = Minio(
+    minioHost, secure=False, access_key=minioUser, secret_key=minioPasswd
+)
+
+# Downloading hospital_data.csv from Minio object storage
+minio_client.fget_object(
+    data_bucket, f"hospital_data.csv", os.path.join(os.getcwd(), "hospital_data.csv")
+)
+hospital_data = pd.read_csv(os.path.join(os.getcwd(), "hospital_data.csv"), index_col=0)
 
 # Defining Redis Variables
 redisHost = os.getenv("REDIS_HOST") or "localhost"
@@ -17,48 +39,133 @@ geolocator = Nominatim(user_agent="my app")
 infoKey = "worker:[INFO]"
 debugKey = "worker:[DEBUG]"
 
+
 def log_debug(message):
     print("DEBUG:", message, file=sys.stdout)
     redisLog = redis.StrictRedis(host=redisHost, port=redisPort, db=2)
-    redisLog.lpush('logging', f"{debugKey}:{message}")
+    redisLog.lpush("logging", f"{debugKey}:{message}")
+
 
 def log_info(message):
     print("INFO:", message, file=sys.stdout)
     redisLog = redis.StrictRedis(host=redisHost, port=redisPort, db=2)
-    redisLog.lpush('logging', f"{infoKey}:{message}")
+    redisLog.lpush("logging", f"{infoKey}:{message}")
 
 
-if __name__ == '__main__':
+def get_distance(lat1, lng1, lat2, lng2):
+    return geodesic((lat1, lng1), (lat2, lng2)).miles
+
+
+# define the n closest hospitals to return
+n_closest = 6
+
+# Define a maximum utilization above which the worker returns
+# n-closest hospitals
+max_utilization = 10
+
+
+def get_predicted_utilization(redis_cache, hospital_name):
+    predicted_utilization_key = f"pred_utilization:{hospital_name}"
+    predicted_utilization = redis_cache.get(predicted_utilization_key)
+    predicted_utilization = (
+        float(predicted_utilization) if predicted_utilization else "Not Found"
+    )
+    return predicted_utilization
+
+
+if __name__ == "__main__":
 
     while True:
-        try:
+        # try:
 
-            # Creating a redis client object for work queue
-            redis_queue = redis.StrictRedis(host=redisHost, port=redisPort, db=1)
+        # Creating a redis client object for work queue
+        redis_queue = redis.StrictRedis(host=redisHost, port=redisPort, db=1)
 
-            # Creating a redis client object for the redis cache containing cached predictions
-            redis_cache = redis.StrictRedis(host=redisHost, port=redisPort, db=0)
+        # Creating a redis client object for the redis cache containing cached predictions
+        redis_cache = redis.StrictRedis(host=redisHost, port=redisPort, db=0)
 
-            # BLPOP will block until an item is available in the list
-            # Checking for items with the toWorker queue in the redis kist
-            work = redis_queue.blpop("toWorker", timeout=0)
+        # BLPOP will block until an item is available in the list
+        # Checking for items with the toWorker queue in the redis kist
+        work = redis_queue.blpop("toWorker", timeout=0)
 
-            # Fetching the queried hospital name from the item which will be at index 1
-            hospital_name = work[1].decode('utf-8')
-            log_info(f"Queried hospital : {hospital_name}")
-            
-            # TODO: In the case of multiple matches for location add some 
-            # further logic to narrow down to the correct one?
-            log_debug(f"Fetching location for {hospital_name}")
-            location = geolocator.geocode(hospital_name , exactly_one=True)
+        # Fetching the queried hospital name from the item which will be at index 1
+        hospital_name = work[1].decode("utf-8")
+        log_info(f"Queried hospital : {hospital_name}")
 
-            # Getting the cached prediction for the queried hospital name
-            predicted_utilization_key = f"pred_utilization:{hospital_name}"
-            predicted_utilization = float(redis_cache.get(predicted_utilization_key))
+        # TODO: In the case of multiple matches for location add some
+        # further logic to narrow down to the correct one?
+        log_debug(f"Fetching location for {hospital_name}")
+        location = geolocator.geocode(hospital_name, exactly_one=True)
 
-            log_info(f"Forecasted utilization for {hospital_name} is {predicted_utilization}")
+        queried_hospital_row = hospital_data[
+            hospital_data["hospital_name"] == hospital_name
+        ]
 
-        except Exception as exp:
-            print(f"Exception raised in log loop: {str(exp)}")
-        sys.stdout.flush()
-        sys.stderr.flush()
+        # Getting the latitude and the longitude of the queried hospital
+        queried_lat = queried_hospital_row["lat"].iloc[0]
+        queried_lng = queried_hospital_row["lng"].iloc[0]
+
+        print(f"queried_lat {type(queried_lat)}")
+        print(f"queried_lng {queried_lng}")
+
+        # get data of hospitals in the same state as the queried hospital
+        same_state_df = hospital_data[
+            hospital_data["state"] == queried_hospital_row["state"].values[0]
+        ]
+
+        # call get_distance on each row in same_state_df
+        same_state_df["distance"] = same_state_df.apply(
+            lambda x: get_distance(
+                x["lat"],
+                x["lng"],
+                queried_lat,
+                queried_lng,
+            ),
+            axis=1,
+        )
+
+        # sort same_state_df by distance
+        same_state_df.sort_values(by=["distance"])
+
+        closest_hospitals_df = same_state_df.head(n_closest)
+        log_info(f"closest_hospitals_df {closest_hospitals_df}")
+
+        response = {}
+
+        # Getting the cached prediction for the queried hospital name
+        predicted_utilization = get_predicted_utilization(redis_cache, hospital_name)
+        log_info(
+            f"Forecasted utilization for {hospital_name} is {predicted_utilization}"
+        )
+
+        closest_hospitals_utilizations = dict()
+        if (
+            type(predicted_utilization) == float
+            and predicted_utilization > max_utilization
+        ):
+            log_info(
+                f"Forecasted utilization for {hospital_name} is > {max_utilization}. Looking for alternatives."
+            )
+            candidates = []
+            for index, row in closest_hospitals_df.iterrows():
+                candidate_hospital = row["hospital_name"]
+                if candidate_hospital != hospital_name:
+                    nearby_predicted_utilization = get_predicted_utilization(
+                        redis_cache, hospital_name=candidate_hospital
+                    )
+                    if type(nearby_predicted_utilization) == float:
+                        log_info(
+                            f"Forecasted utilization for {candidate_hospital} is {nearby_predicted_utilization}"
+                        )
+                        candidates.append(
+                            (candidate_hospital, nearby_predicted_utilization)
+                        )
+
+            sorted_candidates = sorted(candidates, key=lambda x: x[1])
+
+            log_info(f"{sorted_candidates[0]}")
+
+    # except Exception as exp:
+    #     print(f"Exception raised in log loop: {str(exp)}")
+    # sys.stdout.flush()
+    # sys.stderr.flush()
