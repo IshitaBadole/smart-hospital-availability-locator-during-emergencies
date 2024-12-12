@@ -1,27 +1,32 @@
 import json
+import os
+import sys
+from datetime import datetime
+
+import pandas as pd
+import xgboost as xgb
 from pykafka import KafkaClient
 from pykafka.common import OffsetType
-import xgboost as xgb
-from datetime import datetime
-import pandas as pd
-import os
-from minio import Minio
+
 import redis
-import sys
+from minio import Minio
 
 # Logging variables
 infoKey = "kafka_consumer:[INFO]"
 debugKey = "kafka_consumer:[DEBUG]"
 
+
 def log_debug(message):
     print("DEBUG:", message, file=sys.stdout)
     redisLog = redis.StrictRedis(host=redisHost, port=redisPort, db=2)
-    redisLog.lpush('logging', f"{debugKey}:{message}")
+    redisLog.lpush("logging", f"{debugKey}:{message}")
+
 
 def log_info(message):
     print("INFO:", message, file=sys.stdout)
     redisLog = redis.StrictRedis(host=redisHost, port=redisPort, db=2)
-    redisLog.lpush('logging', f"{infoKey}:{message}")
+    redisLog.lpush("logging", f"{infoKey}:{message}")
+
 
 def execute_with_retry(command, *args, **kwargs):
     """
@@ -42,12 +47,13 @@ def execute_with_retry(command, *args, **kwargs):
         return result
     except (TimeoutError, ConnectionError) as e:
         # Creating the Redis client again
-        redisClient = redis.StrictRedis(host=redisHost, 
-                                port=redisPort, 
-                                db=0, decode_responses=True)
-        result = command(*args, **kwargs)  
+        redisClient = redis.StrictRedis(
+            host=redisHost, port=redisPort, db=0, decode_responses=True
+        )
+        result = command(*args, **kwargs)
         log_debug(f"Command:{command} result:{result}")
         return result
+
 
 # Defining minio variables
 minioHost = os.getenv("MINIO_HOST") or "localhost:9000"
@@ -59,15 +65,14 @@ redisHost = os.getenv("REDIS_HOST") or "localhost"
 redisPort = os.getenv("REDIS_PORT") or 6379
 
 # Creating a minio client object
-minio_client = Minio(minioHost,
-               secure=False,
-               access_key=minioUser,
-               secret_key=minioPasswd)
+minio_client = Minio(
+    minioHost, secure=False, access_key=minioUser, secret_key=minioPasswd
+)
 
 # Creating the Redis client
-redisClient = redis.StrictRedis(host=redisHost, 
-                                    port=redisPort, 
-                                    db=0, decode_responses=True)
+redisClient = redis.StrictRedis(
+    host=redisHost, port=redisPort, db=0, decode_responses=True
+)
 
 # bucket variables
 model_bucket = "models"
@@ -84,35 +89,41 @@ previous_sample = {}
 
 # Creating the Kafka Client object and the Kafka topic
 client = KafkaClient("localhost:9092")
-topic = client.topics['hospital-data-topic']
+topic = client.topics["hospital-data-topic"]
 
-# Loading the mappings for categorical variables to their corresponding integer values 
+# Loading the mappings for categorical variables to their corresponding integer values
 log_debug(f"Downloading mappings.json from MinIo")
-minio_client.fget_object(data_bucket, f"mappings.json", os.path.join(os.getcwd(), "mappings.json"))
-with open(os.path.join(os.getcwd(),'mappings.json')) as fp:
+minio_client.fget_object(
+    data_bucket, f"mappings.json", os.path.join(os.getcwd(), "mappings.json")
+)
+with open(os.path.join(os.getcwd(), "mappings.json")) as fp:
     mappings = json.load(fp)
 
 # Creating the Kafka consumer
-consumer = topic.get_simple_consumer(consumer_group=b"default",
+consumer = topic.get_simple_consumer(
+    consumer_group=b"default",
     auto_offset_reset=OffsetType.LATEST,
-    reset_offset_on_start=True,
-    auto_commit_enable=True)
+    reset_offset_on_start=True
+)
 
 # Initializing the XGBoost model
 model = xgb.XGBRegressor()
 
 # Getting the V0 XGB model from Minio object storage
-response = minio_client.fget_object(model_bucket, 'xgb_model_v0.json', os.path.join(os.getcwd(),'xgb_model_v0.json'))
+response = minio_client.fget_object(
+    model_bucket, "xgb_model_v0.json", os.path.join(os.getcwd(), "xgb_model_v0.json")
+)
 
 # Loading the model
-model.load_model(os.path.join(os.getcwd(), 'xgb_model_v0.json'))
+model.load_model(os.path.join(os.getcwd(), "xgb_model_v0.json"))
 
 for msg in consumer:
     # Decoding the JSON message coming from the producer
-    sample = json.loads(msg.value.decode('utf-8'))
+    sample = json.loads(msg.value.decode("utf-8"))
+    log_info(f"Received message: {sample}")
 
     # Converting the timestamp to a datetime object to extract temporal features
-    timestamp = datetime.strptime(sample['timestamp'], "%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.strptime(sample["timestamp"], "%Y-%m-%d %H:%M:%S")
 
     # Adding the temporal lag features to the sample
     ground_truth_key = f"ground_truth:{sample['hospital_name']}"
@@ -122,11 +133,11 @@ for msg in consumer:
     if not key_exists:
         # initialize the lag features to 0
         lags = [0.0] * 12
-        execute_with_retry(redisClient.rpush, ground_truth_key, *lags )
+        execute_with_retry(redisClient.rpush, ground_truth_key, *lags)
     else:
         # get the ground truth values stored in redis
         lags = redisClient.lrange(ground_truth_key, 0, -1)
-        lags = execute_with_retry(redisClient.lrange, ground_truth_key, 0 , -1)
+        lags = execute_with_retry(redisClient.lrange, ground_truth_key, 0, -1)
         lags = [float(lag) for lag in lags]
 
     for i in range(12):
@@ -141,11 +152,24 @@ for msg in consumer:
 
     # Storing the latitude, longitude, city and address of the current message before dropping them
     # from the sample. These variables are not required for prediction
-    lat, lng = sample['lat'], sample['lng']
-    city, address, hospital_name = sample['city'], sample['address'], sample['hospital_name']
+    lat, lng = sample["lat"], sample["lng"]
+    city, address, state, hospital_name = (
+        sample["city"],
+        sample["address"],
+        sample["state"],
+        sample["hospital_name"],
+    )
 
     # Deleting the columns not required for model predictions
-    for key in ["lat", "lng", "city", "address", "timestamp", "subtotal_acute_utilization"]:
+    for key in [
+        "lat",
+        "lng",
+        "city",
+        "state",
+        "address",
+        "timestamp",
+        "subtotal_acute_utilization",
+    ]:
         del sample[key]
 
     # Mapping all the categorical variables to integer values
@@ -159,11 +183,11 @@ for msg in consumer:
     # Align target with the previous sample for this hospital
     if previous_sample[hospital_name]:
         # Set the target for the last sample as the current `simulated_utilization`
-        previous_sample[hospital_name]['target'] = sample['simulated_utilization']
+        previous_sample[hospital_name]["target"] = sample["simulated_utilization"]
 
         # Add the previous sample to the buffer
-        prev_sample = pd.DataFrame(previous_sample[hospital_name], index = ['index'])
-        buffer = pd.concat([buffer, prev_sample], axis = 0)
+        prev_sample = pd.DataFrame(previous_sample[hospital_name], index=["index"])
+        buffer = pd.concat([buffer, prev_sample], axis=0)
 
     # Update the last sample for this hospital
     previous_sample[hospital_name] = sample.copy()
@@ -171,16 +195,16 @@ for msg in consumer:
     # If buffer limit has been reached, retrain the model, clear the buffer and
     # store retrained model in the MinIO object storage
     if len(buffer) == buffer_size:
-        
+
         log_info("Retraining the XGBRegressor Model")
 
         # Convert the buffer to a DataFrame
         train_data = buffer.copy()
-        train_data.set_index(['index'], inplace=True)
+        train_data.set_index(["index"], inplace=True)
 
         # Separate features and target variable
-        X_train = train_data.drop(columns=['target'])
-        y_train = train_data['target']
+        X_train = train_data.drop(columns=["target"])
+        y_train = train_data["target"]
 
         # Convert data to DMatrix
         dtrain = xgb.DMatrix(X_train, label=y_train)
@@ -198,26 +222,29 @@ for msg in consumer:
 
         # Clearing the buffer
         buffer = pd.DataFrame()
-        
-        
+
     # Creating a dataframe of the current sample
-    sample_df = pd.DataFrame(sample, index=['index'])
-    sample_df.set_index(['index'], inplace=True)
-    print(sample_df.dtypes)
+    sample_df = pd.DataFrame(sample, index=["index"])
+    sample_df.set_index(["index"], inplace=True)
 
     # Predict the utilization for the next hour
     predicted_utilization = float(model.predict(sample_df)[0])
-
 
     log_info(f"Predicted utilization: {predicted_utilization}")
 
     # Store the predicted utilization in Redis cache
     predicted_utilization_key = f"pred_utilization:{hospital_name}"
-    execute_with_retry(redisClient.set, predicted_utilization_key, predicted_utilization)
+    execute_with_retry(
+        redisClient.set, predicted_utilization_key, predicted_utilization
+    )
 
     # consumer.commit_offsets()
 
     # Add the ground truth utilization to the temporal lags
-    execute_with_retry(redisClient.rpush, ground_truth_key, sample['simulated_utilization'])
+    execute_with_retry(
+        redisClient.rpush, ground_truth_key, sample["simulated_utilization"]
+    )
     # Remove the oldest lag
     execute_with_retry(redisClient.lpop, ground_truth_key)
+
+    consumer.commit_offsets()
