@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-from minio import Minio
 import os
+from minio import Minio
 
 minioHost = os.getenv("MINIO_HOST") or "localhost:9000"
 minioUser = os.getenv("MINIO_USER") or "rootuser"
@@ -20,9 +20,9 @@ def put_object(bucketname, bucket_filename, local_filepath, content_type="applic
 
     try:
         objects = client.list_objects(bucketname)
-        is_empty = not any(objects)
+        object_exists = bucket_filename in [obj.object_name for obj in objects]
 
-        if is_empty:
+        if not object_exists:
             print(f"Bucket {bucketname} is empty. Add file {bucket_filename}")
             client.fput_object(bucketname, 
                                bucket_filename, 
