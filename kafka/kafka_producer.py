@@ -6,18 +6,34 @@ import numpy as np
 import pandas as pd
 from pykafka import KafkaClient
 from minio import Minio
+import redis
+import sys
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+# Logging variables
+infoKey = "kafka_producer:[INFO]"
+debugKey = "kafka_producer:[DEBUG]"
+
+def log_debug(message):
+    print("DEBUG:", message, file=sys.stdout)
+    redisLog = redis.StrictRedis(host=redisHost, port=redisPort, db=2)
+    redisLog.lpush('logging', f"{debugKey}:{message}")
+
+def log_info(message):
+    print("INFO:", message, file=sys.stdout)
+    redisLog = redis.StrictRedis(host=redisHost, port=redisPort, db=2)
+    redisLog.lpush('logging', f"{infoKey}:{message}")
 
 # Defining minio variables
 minioHost = os.getenv("MINIO_HOST") or "localhost:9000"
 minioUser = os.getenv("MINIO_USER") or "rootuser"
 minioPasswd = os.getenv("MINIO_PASSWD") or "rootpass123"
 
+# Defining Redis Variables
+redisHost = os.getenv("REDIS_HOST") or "localhost"
+redisPort = os.getenv("REDIS_PORT") or 6379
+
 # bucket variables
 data_bucket = "data"
-
 
 # Simulate utilization using trends, noise, and random events
 def simulate_utilization(num_records):
@@ -57,6 +73,7 @@ def main():
     )
 
     # Downloading hospital_data.csv from Minio object storage
+    log_debug("Downloading hospital_data.csv from MinIO")
     minio_client.fget_object(data_bucket, f"hospital_data.csv", os.path.join(os.getcwd(), 'hospital_data.csv'))
     hospital_data = pd.read_csv(os.path.join(os.getcwd(),"hospital_data.csv"), index_col=0)
 
@@ -77,10 +94,8 @@ def main():
         for idx, row in hospital_data.iterrows():
             num_records = len(time_range)
 
-            print(
-                f"Simulate utilization for hospital: {hospital_data.iloc[idx]['hospital_name']}"
-            )
             utilization = simulate_utilization(num_records)
+            log_debug(f"Simulated utilization for hospital {hospital_data.iloc[idx]['hospital_name']} : {utilization}")
 
             # Repeat the hospital's static features for each timestamp
             hospital_static_features = {
@@ -106,7 +121,7 @@ def main():
             message = row.to_dict()
 
             # logger.debug(row)
-            print(f"[{idx}] Sending utilization for {message['hospital_name']} at {message['timestamp']}")
+            log_debug(f"[{idx}] Sending utilization for {message['hospital_name']} at {message['timestamp']}")
             producer.produce(json.dumps(message).encode("utf-8"))
 
             # Wait for 1 minute after sending num_of_hospitals data

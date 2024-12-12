@@ -7,6 +7,21 @@ import pandas as pd
 import os
 from minio import Minio
 import redis
+import sys
+
+# Logging variables
+infoKey = "kafka_consumer:[INFO]"
+debugKey = "kafka_consumer:[DEBUG]"
+
+def log_debug(message):
+    print("DEBUG:", message, file=sys.stdout)
+    redisLog = redis.StrictRedis(host=redisHost, port=redisPort, db=2)
+    redisLog.lpush('logging', f"{debugKey}:{message}")
+
+def log_info(message):
+    print("INFO:", message, file=sys.stdout)
+    redisLog = redis.StrictRedis(host=redisHost, port=redisPort, db=2)
+    redisLog.lpush('logging', f"{infoKey}:{message}")
 
 def execute_with_retry(command, *args, **kwargs):
     """
@@ -23,7 +38,7 @@ def execute_with_retry(command, *args, **kwargs):
     try:
         # Call the Redis command
         result = command(*args, **kwargs)
-        print(f"Command:{command} result:{result}")
+        log_debug(f"Command:{command} result:{result}")
         return result
     except (TimeoutError, ConnectionError) as e:
         # Creating the Redis client again
@@ -31,7 +46,7 @@ def execute_with_retry(command, *args, **kwargs):
                                 port=redisPort, 
                                 db=0, decode_responses=True)
         result = command(*args, **kwargs)  
-        print(f"Command:{command} result:{result}")
+        log_debug(f"Command:{command} result:{result}")
         return result
 
 # Defining minio variables
@@ -72,6 +87,7 @@ client = KafkaClient("localhost:9092")
 topic = client.topics['hospital-data-topic']
 
 # Loading the mappings for categorical variables to their corresponding integer values 
+log_debug(f"Downloading mappings.json from MinIo")
 minio_client.fget_object(data_bucket, f"mappings.json", os.path.join(os.getcwd(), "mappings.json"))
 with open(os.path.join(os.getcwd(),'mappings.json')) as fp:
     mappings = json.load(fp)
@@ -156,7 +172,7 @@ for msg in consumer:
     # store retrained model in the MinIO object storage
     if len(buffer) == buffer_size:
         
-        print("Retraining the XGBRegressor Model")
+        log_info("Retraining the XGBRegressor Model")
 
         # Convert the buffer to a DataFrame
         train_data = buffer.copy()
@@ -178,9 +194,11 @@ for msg in consumer:
         model_filename = f"xgb_model_v{curr_model_version}.json"
         model_booster.save_model(model_filename)
         minio_client.fput_object(model_bucket, model_filename, model_filename)
+        log_info("Retraining model complete. Storing updated model in MinIO")
 
         # Clearing the buffer
         buffer = pd.DataFrame()
+        
         
     # Creating a dataframe of the current sample
     sample_df = pd.DataFrame(sample, index=['index'])
@@ -191,8 +209,7 @@ for msg in consumer:
     predicted_utilization = float(model.predict(sample_df)[0])
 
 
-    print("Predicted utilization: ", predicted_utilization)
-    print()
+    log_info(f"Predicted utilization: {predicted_utilization}")
 
     # Store the predicted utilization in Redis cache
     predicted_utilization_key = f"pred_utilization:{hospital_name}"

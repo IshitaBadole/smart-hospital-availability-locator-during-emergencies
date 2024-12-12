@@ -6,13 +6,27 @@ import redis
 from minio import Minio, InvalidResponseError
 from geopy.geocoders import Nominatim
 
-
 # Defining Redis Variables
 redisHost = os.getenv("REDIS_HOST") or "localhost"
 redisPort = os.getenv("REDIS_PORT") or 6379
 
 # Defining the geolocator object
 geolocator = Nominatim(user_agent="my app")
+
+# Logging variables
+infoKey = "worker:[INFO]"
+debugKey = "worker:[DEBUG]"
+
+def log_debug(message):
+    print("DEBUG:", message, file=sys.stdout)
+    redisLog = redis.StrictRedis(host=redisHost, port=redisPort, db=2)
+    redisLog.lpush('logging', f"{debugKey}:{message}")
+
+def log_info(message):
+    print("INFO:", message, file=sys.stdout)
+    redisLog = redis.StrictRedis(host=redisHost, port=redisPort, db=2)
+    redisLog.lpush('logging', f"{infoKey}:{message}")
+
 
 if __name__ == '__main__':
 
@@ -31,16 +45,18 @@ if __name__ == '__main__':
 
             # Fetching the queried hospital name from the item which will be at index 1
             hospital_name = work[1].decode('utf-8')
+            log_info(f"Queried hospital : {hospital_name}")
             
             # TODO: In the case of multiple matches for location add some 
             # further logic to narrow down to the correct one?
+            log_debug(f"Fetching location for {hospital_name}")
             location = geolocator.geocode(hospital_name , exactly_one=True)
 
             # Getting the cached prediction for the queried hospital name
             predicted_utilization_key = f"pred_utilization:{hospital_name}"
             predicted_utilization = float(redis_cache.get(predicted_utilization_key))
 
-            print(f"Forecasted utilization for {hospital_name} is {predicted_utilization}")
+            log_info(f"Forecasted utilization for {hospital_name} is {predicted_utilization}")
 
         except Exception as exp:
             print(f"Exception raised in log loop: {str(exp)}")

@@ -9,9 +9,24 @@ import os
 from minio import Minio, InvalidResponseError
 import uuid
 import redis
+import sys
 
 # Initialize the Flask application
 app = Flask(__name__)
+
+# Logging variables
+infoKey = "rest_server:[INFO]"
+debugKey = "rest_server:[DEBUG]"
+
+def log_debug(message):
+    print("DEBUG:", message, file=sys.stdout)
+    redisLog = redis.StrictRedis(host=redisHost, port=redisPort, db=2)
+    redisLog.lpush('logging', f"{debugKey}:{message}")
+
+def log_info(message):
+    print("INFO:", message, file=sys.stdout)
+    redisLog = redis.StrictRedis(host=redisHost, port=redisPort, db=2)
+    redisLog.lpush('logging', f"{infoKey}:{message}")
 
 # Defining Redis Variables
 redisHost = os.getenv("REDIS_HOST") or "localhost"
@@ -34,6 +49,7 @@ def query():
                                     db=1)
     
     # Pusing the songhash to be processed to the Redis Queue
+    log_info(f"Adding {hospital_name} to Redis queue")
     redisClient.rpush("toWorker", hospital_name)
 
     # Returing a response after successfully storing the mp3 on minio and adding the song to the Redis Queu
