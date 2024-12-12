@@ -62,7 +62,7 @@ n_closest = 6
 
 # Define a maximum utilization above which the worker returns
 # n-closest hospitals
-max_utilization = 10
+max_utilization = 80
 
 
 def get_predicted_utilization(redis_cache, hospital_name):
