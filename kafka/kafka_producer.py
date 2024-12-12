@@ -5,9 +5,18 @@ import os
 import numpy as np
 import pandas as pd
 from pykafka import KafkaClient
+from minio import Minio
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+# Defining minio variables
+minioHost = os.getenv("MINIO_HOST") or "localhost:9000"
+minioUser = os.getenv("MINIO_USER") or "rootuser"
+minioPasswd = os.getenv("MINIO_PASSWD") or "rootpass123"
+
+# bucket variables
+data_bucket = "data"
 
 
 # Simulate utilization using trends, noise, and random events
@@ -29,6 +38,13 @@ def simulate_utilization(num_records):
 
 
 def main():
+
+    # Creating a minio client object
+    minio_client = Minio(minioHost,
+               secure=False,
+               access_key=minioUser,
+               secret_key=minioPasswd)
+    
     # As a start, work with only five hospitals
     num_of_hospitals = 5
 
@@ -40,8 +56,9 @@ def main():
         min_queued_messages=num_of_hospitals, linger_ms=60 * 1000
     )
 
-    # Read the static hospital data
-    hospital_data = pd.read_csv(os.path.join(os.getcwd(), "data", "final_hospital_data.csv"), index_col=0)
+    # Downloading hospital_data.csv from Minio object storage
+    minio_client.fget_object(data_bucket, f"hospital_data.csv", os.path.join(os.getcwd(), 'hospital_data.csv'))
+    hospital_data = pd.read_csv(os.path.join(os.getcwd(),"hospital_data.csv"), index_col=0)
 
     hospital_data = hospital_data.head(n=num_of_hospitals)
 

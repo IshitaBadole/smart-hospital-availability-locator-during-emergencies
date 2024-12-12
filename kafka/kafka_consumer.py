@@ -54,8 +54,11 @@ redisClient = redis.StrictRedis(host=redisHost,
                                     port=redisPort, 
                                     db=0, decode_responses=True)
 
-# Model variables
-bucket = "models"
+# bucket variables
+model_bucket = "models"
+data_bucket = "data"
+
+
 curr_model_version = 0
 
 # Initialzing an empty df to store incoming real-time samples
@@ -68,9 +71,9 @@ previous_sample = {}
 client = KafkaClient("localhost:9092")
 topic = client.topics['hospital-data-topic']
 
-# Loading the mappings for categorical variables to their corresponding integer values from 
-# data/mappings.json
-with open(os.path.join(os.getcwd(), 'data', 'mappings.json')) as fp:
+# Loading the mappings for categorical variables to their corresponding integer values 
+minio_client.fget_object(data_bucket, f"mappings.json", os.path.join(os.getcwd(), "mappings.json"))
+with open(os.path.join(os.getcwd(),'mappings.json')) as fp:
     mappings = json.load(fp)
 
 # Creating the Kafka consumer
@@ -83,7 +86,7 @@ consumer = topic.get_simple_consumer(consumer_group=b"default",
 model = xgb.XGBRegressor()
 
 # Getting the V0 XGB model from Minio object storage
-response = minio_client.fget_object(bucket, 'xgb_model_v0.json', os.path.join(os.getcwd(),'xgb_model_v0.json'))
+response = minio_client.fget_object(model_bucket, 'xgb_model_v0.json', os.path.join(os.getcwd(),'xgb_model_v0.json'))
 
 # Loading the model
 model.load_model(os.path.join(os.getcwd(), 'xgb_model_v0.json'))
@@ -174,7 +177,7 @@ for msg in consumer:
         curr_model_version += 1
         model_filename = f"xgb_model_v{curr_model_version}.json"
         model_booster.save_model(model_filename)
-        minio_client.fput_object(bucket, model_filename, model_filename)
+        minio_client.fput_object(model_bucket, model_filename, model_filename)
 
         # Clearing the buffer
         buffer = pd.DataFrame()
