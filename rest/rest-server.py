@@ -38,26 +38,38 @@ def hello_world():
 
 @app.route('/api/v1/query', methods=['POST'])
 def query():
+    
+    # Creating a unique task ID
+    task_id = str(uuid.uuid4())
+
+    # Get task data
     json_data = request.json
 
     # Getting the hospital_name from the JSON payload
     hospital_name = json_data['hospital_name']
+
+    task_data = {
+        "id" : task_id,
+        "hospital_name" : hospital_name 
+    }
+
+    task_data = json.dumps(task_data)
 
     # Creating the Redis client to connect to the redis worker queue
     redisClient = redis.StrictRedis(host=redisHost, 
                                     port=redisPort, 
                                     db=1)
     
-    # Pusing the songhash to be processed to the Redis Queue
-    log_info(f"Adding {hospital_name} to Redis queue")
-    redisClient.rpush("toWorker", hospital_name)
+    # Pushing the songhash to be processed to the Redis Queue
+    log_info(f"{task_id} : Adding {hospital_name} to Redis queue")
+    redisClient.rpush("toWorker", task_data)
 
     # Returing a response after successfully storing the mp3 on minio and adding the song to the Redis Queu
     return {
+        "id" : task_id,
         "hospital_name": hospital_name, 
         "reason": f"{hospital_name} added to queue"
     }
-
 
 @app.route("/api/v1/queue", methods = ["GET"])
 def get_queue():
@@ -78,6 +90,22 @@ def get_queue():
     return {
         "queue": queue
     }
+
+@app.route('/api/v1/result/<task_id>', methods=['GET'])
+def get_result(task_id):
+    # Creating the Redis client to connect to the redis worker queue
+    redisClient = redis.StrictRedis(host=redisHost, 
+                                    port=redisPort, 
+                                    db=3)
+    # Getting the results for the specified task ID
+    result = redisClient.get(task_id)
+
+    # Removing the cached result from the queue
+    redisClient.delete(task_id)
+    if result:
+        return json.dumps({'status': 'Completed', 'result': json.loads(result)}), 200
+    else:
+        return json.dumps({'status': 'Pending'}), 202
 
 # start flask app
 app.run(host="0.0.0.0", port=5000)
