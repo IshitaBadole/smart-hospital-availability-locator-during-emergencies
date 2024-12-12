@@ -23,11 +23,7 @@ def hello_world():
 
 @app.route('/api/v1/query', methods=['POST'])
 def query():
-    
-    data = request.json
-
-    # Converting the payload to JSON format
-    json_data = json.loads(data)
+    json_data = request.json
 
     # Getting the hospital_name from the JSON payload
     hospital_name = json_data['hospital_name']
@@ -47,7 +43,7 @@ def query():
     }
 
 
-@app.route("/apiv1/queue", methods = ["GET"])
+@app.route("/api/v1/queue", methods = ["GET"])
 def get_queue():
     # Creating the Redis client
     redisClient = redis.StrictRedis(host=redisHost, 
