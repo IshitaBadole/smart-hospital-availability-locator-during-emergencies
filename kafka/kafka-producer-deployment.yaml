@@ -1,20 +1,20 @@
 apiVersion: apps/v1 #  for k8s versions before 1.9.0 use apps/v1beta2  and before 1.8.0 use extensions/v1beta1
 kind: Deployment
 metadata:
-  name: kafka_producer
+  name: kafka-producer
 spec:
   selector:
     matchLabels:
-      app: kafka_producer
+      app: kafka-producer
   replicas: 1
   template:
     metadata:
       labels:
-        app: kafka_producer
+        app: kafka-producer
     spec:
       containers:
-      - name: kafka_producer
-        image: isba1563/kafka_producer:latest
+      - name: kafka-producer
+        image: isba1563/kafka-producer:latest
         resources:
           requests:
             cpu: 100m

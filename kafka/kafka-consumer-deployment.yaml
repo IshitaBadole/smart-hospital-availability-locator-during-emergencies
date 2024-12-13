@@ -1,20 +1,20 @@
 apiVersion: apps/v1 #  for k8s versions before 1.9.0 use apps/v1beta2  and before 1.8.0 use extensions/v1beta1
 kind: Deployment
 metadata:
-  name: kafka_consumer
+  name: kafka-consumer
 spec:
   selector:
     matchLabels:
-      app: kafka_consumer
+      app: kafka-consumer
   replicas: 1
   template:
     metadata:
       labels:
-        app: kafka_consumer
+        app: kafka-consumer
     spec:
       containers:
-      - name: kafka_consumer
-        image: isba1563/kafka_consumer:latest
+      - name: kafka-consumer
+        image: isba1563/kafka-consumer:latest
         resources:
           requests:
             cpu: 100m
