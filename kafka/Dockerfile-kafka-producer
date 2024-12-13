@@ -1,0 +1,8 @@
+FROM python:3.7-alpine
+LABEL MAINTAINER="isba1563@colorado.edu"
+RUN apk add gcc libc-dev libffi-dev
+RUN  pip3 install --upgrade redis minio pykafka pandas numpy
+WORKDIR /app
+COPY    kafka_producer.py .
+CMD [ "python3", "kafka_producer.py"]
+

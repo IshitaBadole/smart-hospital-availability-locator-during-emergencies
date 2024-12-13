@@ -1,0 +1,38 @@
+apiVersion: apps/v1 #  for k8s versions before 1.9.0 use apps/v1beta2  and before 1.8.0 use extensions/v1beta1
+kind: Deployment
+metadata:
+  name: kafka_consumer
+spec:
+  selector:
+    matchLabels:
+      app: kafka_consumer
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: kafka_consumer
+    spec:
+      containers:
+      - name: kafka_consumer
+        image: isba1563/kafka_consumer:latest
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+
+          limits:
+            cpu: 200m
+            memory: 200Mi
+        ports:
+          - containerPort: 5000
+        env:
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: MINIO_HOST
+          value: "minio:9000"
+        - name: MINIO_USER
+          value: "rootuser"
+        - name: MINIO_PASSWD
+          value: "rootpass123"
