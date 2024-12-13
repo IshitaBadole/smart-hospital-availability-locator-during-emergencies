@@ -6,8 +6,8 @@ DOCKERUSER=isba1563
 #
 
 build:
-	docker build -f Dockerfile -t kafka_producer  .
-	docker build -f Dockerfile -t kafka_consumer  .
+	docker build -f Dockerfile-kafka-producer -t kafka-producer  .
+	docker build -f Dockerfile-kafka-consumer -t kafka-consumer  .
 
 #
 # The following make rule labels the current docker image with the version
@@ -15,11 +15,11 @@ build:
 # hub.docker.io
 #
 push:
-	docker tag kafka_producer  $(DOCKERUSER)/kafka_producer:$(VERSION)
-	docker push $(DOCKERUSER)/kafka_producer:$(VERSION)
-	docker tag kafka_producer  $(DOCKERUSER)/kafka_producer:latest
-	docker push $(DOCKERUSER)/kafka_producer:latest
-	docker tag kafka_consumer  $(DOCKERUSER)/kafka_consumer:$(VERSION)
-	docker push $(DOCKERUSER)/kafka_consumer:$(VERSION)
-	docker tag kafka_consumer  $(DOCKERUSER)/kafka_consumer:latest
-	docker push $(DOCKERUSER)/kafka_consumer:latest
+	docker tag kafka-producer  $(DOCKERUSER)/kafka-producer:$(VERSION)
+	docker push $(DOCKERUSER)/kafka-producer:$(VERSION)
+	docker tag kafka-producer  $(DOCKERUSER)/kafka-producer:latest
+	docker push $(DOCKERUSER)/kafka-producer:latest
+	docker tag kafka-consumer  $(DOCKERUSER)/kafka-consumer:$(VERSION)
+	docker push $(DOCKERUSER)/kafka-consumer:$(VERSION)
+	docker tag kafka-consumer  $(DOCKERUSER)/kafka-consumer:latest
+	docker push $(DOCKERUSER)/kafka-consumer:latest
