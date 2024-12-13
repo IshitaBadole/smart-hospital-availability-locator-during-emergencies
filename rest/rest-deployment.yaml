@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: rest-server
-        image: vera5660/demucs-rest:latest
+        image: isba1563/rest:latest
         resources:
           requests:
             cpu: 100m

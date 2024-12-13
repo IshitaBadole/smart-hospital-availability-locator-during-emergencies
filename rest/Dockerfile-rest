@@ -1,5 +1,5 @@
 FROM python:3.7-alpine
-LABEL MAINTAINER="vera5660@colorado.edu"
+LABEL MAINTAINER="isba1563@colorado.edu"
 RUN apk add gcc libc-dev libffi-dev
 RUN  pip3 install --upgrade redis jsonpickle requests flask minio
 WORKDIR /app

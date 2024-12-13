@@ -1,10 +1,10 @@
 VERSION=v1
-DOCKERUSER=vera5660
+DOCKERUSER=isba1563
 
 build:
-	docker build -f Dockerfile -t demucs-worker .
+	docker build -f Dockerfile -t worker .
 push:build
-	docker tag demucs-worker $(DOCKERUSER)/demucs-worker:$(VERSION)
-	docker push $(DOCKERUSER)/demucs-worker:$(VERSION)
-	docker tag demucs-worker $(DOCKERUSER)/demucs-worker:latest
-	docker push $(DOCKERUSER)/demucs-worker:latest
+	docker tag worker $(DOCKERUSER)/worker:$(VERSION)
+	docker push $(DOCKERUSER)/worker:$(VERSION)
+	docker tag worker $(DOCKERUSER)/worker:latest
+	docker push $(DOCKERUSER)/worker:latest

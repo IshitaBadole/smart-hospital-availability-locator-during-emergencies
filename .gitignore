@@ -1,3 +1,7 @@
 venv/
 .DS_Store
 xgb*
+hospital*.csv
+mappings.json
+add_state.py
+

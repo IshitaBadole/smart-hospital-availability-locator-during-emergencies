@@ -1,11 +1,11 @@
 VERSION=v2
-DOCKERUSER=vera5660
+DOCKERUSER=isba1563
 
 build:
-	docker build -f Dockerfile-rest -t demucs-rest .
+	docker build -f Dockerfile-rest -t rest .
 
 push:build
-	docker tag demucs-rest $(DOCKERUSER)/demucs-rest:$(VERSION)
-	docker push $(DOCKERUSER)/demucs-rest:$(VERSION)
-	docker tag demucs-rest $(DOCKERUSER)/demucs-rest:latest
-	docker push $(DOCKERUSER)/demucs-rest:latest
+	docker tag rest $(DOCKERUSER)/rest:$(VERSION)
+	docker push $(DOCKERUSER)/rest:$(VERSION)
+	docker tag rest $(DOCKERUSER)/rest:latest
+	docker push $(DOCKERUSER)/rest:latest

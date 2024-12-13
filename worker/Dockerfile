@@ -1,10 +1,11 @@
-FROM xserrat/facebook-demucs:latest
+
+FROM python:3.7
 
 WORKDIR /srv
 
 COPY worker-server.py .
 
-RUN  pip3 install --upgrade minio redis requests
+RUN pip3 install --upgrade minio redis requests geopy pandas 
 
-ENTRYPOINT ["python3", "worker-server.py"]
+CMD ["python3", "worker-server.py"]
 
