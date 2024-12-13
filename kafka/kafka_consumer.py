@@ -64,6 +64,10 @@ minioPasswd = os.getenv("MINIO_PASSWD") or "rootpass123"
 redisHost = os.getenv("REDIS_HOST") or "localhost"
 redisPort = os.getenv("REDIS_PORT") or 6379
 
+# Defining Kafka Variables
+kafkaHost = os.getenv("KAFKA_HOST") or "localhost"
+kafkaPort = os.getenv("KAFKA_PORT") or 9092
+
 # Creating a minio client object
 minio_client = Minio(
     minioHost, secure=False, access_key=minioUser, secret_key=minioPasswd
@@ -88,7 +92,7 @@ buffer_size = 15
 previous_sample = {}
 
 # Creating the Kafka Client object and the Kafka topic
-client = KafkaClient("localhost:9092")
+client = KafkaClient(f"{kafkaHost}:{kafkaPort}")
 topic = client.topics["hospital-data-topic"]
 
 # Loading the mappings for categorical variables to their corresponding integer values

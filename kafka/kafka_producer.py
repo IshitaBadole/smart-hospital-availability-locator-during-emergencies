@@ -37,6 +37,10 @@ minioPasswd = os.getenv("MINIO_PASSWD") or "rootpass123"
 redisHost = os.getenv("REDIS_HOST") or "localhost"
 redisPort = os.getenv("REDIS_PORT") or 6379
 
+# Defining Kafka Variables
+kafkaHost = os.getenv("KAFKA_HOST") or "localhost"
+kafkaPort = os.getenv("KAFKA_PORT") or 9092
+
 # bucket variables
 data_bucket = "data"
 
@@ -70,7 +74,7 @@ def main():
     num_of_hospitals = 6
     num_of_states = 3
 
-    client = KafkaClient("localhost:9092")
+    client = KafkaClient(f"{kafkaHost}:{kafkaPort}")
     topic = client.topics["hospital-data-topic"]
 
     # Try removing min_queeued and linger_ms

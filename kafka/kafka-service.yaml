@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-app
+  labels:
+    app: kafka-app
+spec:
+  ports:
+    - name: plaintext
+      port: 9092
+      targetPort: 9092
+    - name: plaintext-host
+      port: 29092
+      targetPort: 29092
+  selector:
+    app: kafka-app
