@@ -1,11 +1,11 @@
 # imports
+import json
 import os
 import sys
 
 import pandas as pd
 from geopy.distance import geodesic
-from geopy.geocoders import Nominatim
-import json
+
 import redis
 from minio import InvalidResponseError, Minio
 
@@ -33,9 +33,6 @@ hospital_data = pd.read_csv(os.path.join(os.getcwd(), "hospital_data.csv"), inde
 redisHost = os.getenv("REDIS_HOST") or "localhost"
 redisPort = os.getenv("REDIS_PORT") or 6379
 
-# Defining the geolocator object
-geolocator = Nominatim(user_agent="my app")
-
 # Logging variables
 infoKey = "worker:[INFO]"
 debugKey = "worker:[DEBUG]"
@@ -62,7 +59,7 @@ n_closest = 6
 
 # Define a maximum utilization above which the worker returns
 # n-closest hospitals
-max_utilization = 80
+utilization_threshold = 80
 
 
 def get_predicted_utilization(redis_cache, hospital_name):
@@ -91,15 +88,12 @@ if __name__ == "__main__":
             # BLPOP will block until an item is available in the list
             # Checking for items with the toWorker queue in the redis kist
             work = redis_queue.blpop("toWorker", timeout=0)
-            task = json.loads(work[1]) 
+            task = json.loads(work[1])
 
             # Fetching the task ID and queried hospital name from task data
             task_id = task["id"]
-            hospital_name = task['hospital_name']
+            hospital_name = task["hospital_name"]
             log_info(f"Processing task {task_id}. Queried hospital : {hospital_name}")
-
-            log_debug(f"Fetching location for {hospital_name}")
-            location = geolocator.geocode(hospital_name, exactly_one=True)
 
             queried_hospital_row = hospital_data[
                 hospital_data["hospital_name"] == hospital_name
@@ -137,7 +131,9 @@ if __name__ == "__main__":
             response = {}
 
             # Getting the cached prediction for the queried hospital name
-            predicted_utilization = get_predicted_utilization(redis_cache, hospital_name)
+            predicted_utilization = get_predicted_utilization(
+                redis_cache, hospital_name
+            )
             log_info(
                 f"Forecasted utilization for {hospital_name} is {predicted_utilization}"
             )
@@ -145,10 +141,10 @@ if __name__ == "__main__":
             closest_hospitals_utilizations = dict()
             if (
                 type(predicted_utilization) == float
-                and predicted_utilization > max_utilization
+                and predicted_utilization > utilization_threshold
             ):
                 log_info(
-                    f"Forecasted utilization for {hospital_name} is > {max_utilization}. Looking for alternatives."
+                    f"Forecasted utilization for {hospital_name} is > {utilization_threshold}. Looking for alternatives."
                 )
                 candidates = []
                 for index, row in closest_hospitals_df.iterrows():
@@ -174,14 +170,28 @@ if __name__ == "__main__":
                 forecasted_utilization = sorted_candidates[0][1]
 
                 # Getting the address of the recommended hospital
-                address = hospital_data[hospital_data['hospital_name'] == final_hospital]['address'].iloc[0]
+                address = hospital_data[
+                    hospital_data["hospital_name"] == final_hospital
+                ]["address"].iloc[0]
                 print(f"final hospital address : {address}")
 
-
                 worker_result = {
-                    "recommended_hospital" : final_hospital,
-                    "address" : address,
-                    "forecasted_utilization" : forecasted_utilization
+                    "recommended_hospital": final_hospital,
+                    "address": address,
+                    "forecasted_utilization": forecasted_utilization,
+                }
+
+                # Pushing worker result to Redis output cache
+                redis_output.set(task_id, json.dumps(worker_result))
+
+            else:
+                address = hospital_data[
+                    hospital_data["hospital_name"] == hospital_name
+                ]["address"].iloc[0]
+                worker_result = {
+                    "recommended_hospital": hospital_name,
+                    "address": address,
+                    "forecasted_utilization": predicted_utilization,
                 }
 
                 # Pushing worker result to Redis output cache

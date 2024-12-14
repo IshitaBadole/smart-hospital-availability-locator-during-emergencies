@@ -26,3 +26,11 @@ To run the kafka producer and consumer first start kafka and zookeeper
 
 3. Start the Zookeeper service
     `brew services start zookeeper`
+
+## Deploy
+
+Run `sh deploy-all.sh` to setup the application
+
+## Test
+
+Run `python3 test-queries.py` to test the application with sample queries.

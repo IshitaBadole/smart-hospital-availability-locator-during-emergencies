@@ -242,8 +242,6 @@ for msg in consumer:
         redisClient.set, predicted_utilization_key, predicted_utilization
     )
 
-    # consumer.commit_offsets()
-
     # Add the ground truth utilization to the temporal lags
     execute_with_retry(
         redisClient.rpush, ground_truth_key, sample["simulated_utilization"]
